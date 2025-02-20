@@ -2,6 +2,10 @@ import json
 import os
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+
+load_dotenv()
+api_key=os.getenv('GROQ_API_KEY')
 
 src= r'D:\python_elec\news\src.json'
 
