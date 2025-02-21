@@ -5,3 +5,6 @@ I am not getting enough local news, especially about my state, and I do not have
 
 ## Solution  
 Fetch the article, send it to an AI agent to translate and summarize it.
+
+## Comments
+haven't needed to translate articles yet
