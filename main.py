@@ -46,9 +46,9 @@ def accessing_links():
 
             for link in data:
                 article_url = link['link']
-                print(send_to_groq(article_url))
-                # if summary:
-                #     append_to_summaries_json(article_url, summary)
+                summary=send_to_groq(article_url)
+                if summary:
+                    append_to_summaries_json(article_url, summary)
 
 def send_to_groq(article_url):
     headers = {
@@ -58,7 +58,6 @@ def send_to_groq(article_url):
 
     data = {
         "model": "llama-3.3-70b-versatile",
-        
         "messages": [
             {"role": "system", "content": "Summarize the article from this URL and return the title and summary."},
             {"role": "user", "content": f"Summarize this link: {article_url}"}
@@ -69,24 +68,26 @@ def send_to_groq(article_url):
 
     if response.status_code == 200:
         ai_response = response.json()["choices"][0]["message"]["content"]
-        return ai_response  # Expecting AI to return title + summary
+        # Assuming AI response is in the format "Title: <title>\n\nSummary: <summary>"
+        title, summary = ai_response.split('\n\n', 1)
+        return {"title": title.replace("Title: ", ""), "summary": summary.replace("Summary: ", "")}
     else:
         print("Error:", response.json())
         return None
 
-# def append_to_summaries_json(article_url, ai_response):
-#     summary_data = {'source': article_url, 'data': ai_response}
-#     if os.path.exists(summary_file):
-#         with open(summary_file, 'r+') as file:
-#             try:
-#                 array_of_sum = json.load(file)
-#             except json.JSONDecodeError:
-#                 array_of_sum = []
-#             array_of_sum.append(summary_data)
-#             file.seek(0)
-#             json.dump(array_of_sum, file, indent=4)
-#     else:
-#         with open(summary_file, 'w') as file:
-#             json.dump([summary_data], file, indent=4)
+def append_to_summaries_json(article_url, ai_response):
+    summary_data = {'source': article_url, 'data': ai_response}
+    if os.path.exists(summary_file):
+        with open(summary_file, 'r+') as file:
+            try:
+                array_of_sum = json.load(file)
+            except json.JSONDecodeError:
+                array_of_sum = []
+            array_of_sum.append(summary_data)
+            file.seek(0)
+            json.dump(array_of_sum, file, indent=4)
+    else:
+        with open(summary_file, 'w') as file:
+            json.dump([summary_data], file, indent=4)
  
 main()
