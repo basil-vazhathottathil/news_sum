@@ -46,9 +46,9 @@ def accessing_links():
 
             for link in data:
                 article_url = link['link']
-                summary = send_to_groq(article_url)
-                if summary:
-                    append_to_summaries_json(article_url, summary)
+                print(send_to_groq(article_url))
+                # if summary:
+                #     append_to_summaries_json(article_url, summary)
 
 def send_to_groq(article_url):
     headers = {
@@ -58,13 +58,14 @@ def send_to_groq(article_url):
 
     data = {
         "model": "llama-3.3-70b-versatile",
+        
         "messages": [
             {"role": "system", "content": "Summarize the article from this URL and return the title and summary."},
             {"role": "user", "content": f"Summarize this link: {article_url}"}
         ]
     }
 
-    response = requests.post("https://api.groq.com/v1/chat/completions", headers=headers, json=data)
+    response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data)
 
     if response.status_code == 200:
         ai_response = response.json()["choices"][0]["message"]["content"]
