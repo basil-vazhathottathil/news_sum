@@ -88,5 +88,5 @@ def send_to_groq(article_url):
 #     else:
 #         with open(summary_file, 'w') as file:
 #             json.dump([summary_data], file, indent=4)
-
+ 
 main()
