@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 api_key=os.getenv('GROQ_API_KEY')
-
-src= r'D:\python_elec\news\src.json'
+link_file= 'links.json'
+src= 'src.json'
 
 def main():
     if os.path.exists(src):
@@ -24,11 +24,19 @@ def main():
     else:
         print('the file is not at given address')
 
-
 def get_links(soup):
-    links_in_rss= soup.find_all('link')
-    for link in links_in_rss:
-        print(link.get_text())
+    items_in_rss= soup.find_all('item')
+    if items_in_rss:
+        stuff_in_items=[]
+        for item in items_in_rss:
+            title=item.find('title').text if item.find('title') else "no title"
+            link=item.find('link').text if item.find('link') else "no link"
+            stuff_in_items.append({'title':title,'link':link})
+
+            with open(link_file,'w') as file:
+                json.dump(stuff_in_items,file,indent=4)
+
+
 
 
 main()
