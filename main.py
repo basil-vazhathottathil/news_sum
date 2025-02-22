@@ -3,70 +3,88 @@ import os
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
 
-# Load environment variables from a .env file
+# Load environment variables
 load_dotenv()
-api_key = os.getenv('GROQ_API_KEY')
-link_file = 'links.json'
-src = 'src.json'
-summary_file = 'summary.json'
+api_key = os.getenv("GROQ_API_KEY")
+if not api_key:
+    raise ValueError("GROQ_API_KEY is missing from the .env file!")
 
+# File Paths
+src = "src.json"
+link_file = "links.json"
+
+app = FastAPI()
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to my first API... News Sum"}
+
+@app.post("/summarize")
 def main():
-    # Check if the source file exists
-    if os.path.exists(src):
-        with open(src, 'r') as file:
-            data = json.load(file)
-            # Iterate over each URL in the source file
-            for key, url in data.items():
-                try:
-                    # Fetch the URL content
-                    response = requests.get(url)
-                    response.raise_for_status()
-                    # Parse the content using BeautifulSoup
-                    soup = BeautifulSoup(response.text, 'xml')
-                    get_links(soup)
-                except requests.exceptions.RequestException as e:
-                    print(f'unable to fetch url for {key}:', e)
-    else:
-        print('the file is not at given address')
+    if not os.path.exists(src):
+        raise HTTPException(status_code=400, detail="Source file not found.")
 
-    accessing_links()
+    try:
+        with open(src, "r") as file:
+            data = json.load(file)
+    except (json.JSONDecodeError, FileNotFoundError):
+        raise HTTPException(status_code=400, detail="Invalid or empty source file.")
+
+    summaries = []
+    for key, url in data.items():
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "xml")
+            get_links(soup)
+        except requests.exceptions.RequestException as e:
+            print(f"Unable to fetch URL for {key}:", e)
+            continue
+
+    summaries = accessing_links()
+    return {"summaries": summaries}
 
 def get_links(soup):
-    # Find all items in the RSS feed
-    items_in_rss = soup.find_all('item')
+    """Extracts links from the RSS feed and stores them in a list."""
+    items_in_rss = soup.find_all("item")
     if items_in_rss:
         stuff_in_items = []
-        # Extract title and link from each item
         for item in items_in_rss:
-            title = item.find('title').text if item.find('title') else "no title"
-            link = item.find('link').text if item.find('link') else "no link"
-            stuff_in_items.append({'title': title, 'link': link})
+            title = item.find("title").text if item.find("title") else "No title"
+            link = item.find("link").text if item.find("link") else "No link"
+            stuff_in_items.append({"title": title, "link": link})
 
-        # Write the extracted links to a JSON file
-        with open(link_file, 'w') as file:
+        with open(link_file, "w") as file:
             json.dump(stuff_in_items, file, indent=4)
 
 def accessing_links():
-    # Check if the links file exists
+    """Reads links from link_file and summarizes each article."""
+    summaries = []
     if os.path.exists(link_file):
-        with open(link_file, 'r') as file:
-            data = json.load(file)
+        try:
+            with open(link_file, "r") as file:
+                data = json.load(file)
+        except json.JSONDecodeError:
+            return []
 
-            # Iterate over each link in the file
-            for link in data:
-                article_url = link['link']
-                summary = send_to_groq(article_url)
-                if summary:
-                    append_to_summaries_json(article_url, summary)
+        for link in data:
+            article_url = link["link"]
+            summary = send_to_groq(article_url)
+            if summary:
+                summaries.append({"source": article_url, "data": summary})
+
+    return summaries
 
 def send_to_groq(article_url):
+    """Sends article URL to AI model and retrieves summary."""
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
 
-    data = {
+    payload = {
         "model": "llama-3.3-70b-versatile",
         "messages": [
             {"role": "system", "content": "Summarize the article from this URL and return the title and summary."},
@@ -74,40 +92,21 @@ def send_to_groq(article_url):
         ]
     }
 
-    # Send a POST request to the AI API
-    response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data)
-
-    if response.status_code == 200:
+    try:
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+        response.raise_for_status()
         ai_response = response.json()["choices"][0]["message"]["content"]
-        # Assuming AI response is in the format "Title: <title>\n\nSummary: <summary>"
-        title, summary = ai_response.split('\n\n', 1)
-        return {"title": title.replace("Title: ", ""), "summary": summary.replace("Summary: ", "")}
-    else:
-        print("Error:", response.json())
+
+        if "\n\n" in ai_response:
+            title, summary = ai_response.split("\n\n", 1)
+            return {"title": title.replace("Title: ", ""), "summary": summary.replace("Summary: ", "")}
+        else:
+            return {"summary": ai_response}
+
+    except requests.exceptions.RequestException as e:
+        print("Error contacting AI API:", e)
         return None
 
-def append_to_summaries_json(article_url, ai_response):
-    # Create a dictionary with the article URL and AI response
-    summary_data = {'source': article_url, 'data': ai_response}
-    # Check if the summary file exists
-    if os.path.exists(summary_file):
-        with open(summary_file, 'r+') as file:
-            try:
-                # Load existing summaries from the file
-                array_of_sum = json.load(file)
-            except json.JSONDecodeError:
-                # Initialize an empty list if the file is empty or contains invalid JSON
-                array_of_sum = []
-            # Append the new summary to the list
-            array_of_sum.append(summary_data)
-            # Seek to the beginning of the file
-            file.seek(0)
-            # Write the updated list back to the file with indentation
-            json.dump(array_of_sum, file, indent=4)
-    else:
-        # Create a new file and write the new summary to it
-        with open(summary_file, 'w') as file:
-            json.dump([summary_data], file, indent=4)
-
-# Run the main function
-main()
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
