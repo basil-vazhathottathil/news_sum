@@ -1,6 +1,7 @@
 import json
 import os
 import requests
+import re
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -20,21 +21,15 @@ app = FastAPI()
 def home():
     return {"message": "API is running!"}
 
-@app.get("/run")
-def run_script():
-    """Runs the main script."""
-    try:
-        main()
-        return {"status": "success", "message": "Script executed successfully"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
 @app.get("/summaries")
 def get_summaries():
-    """Fetches the summaries from the links."""
+    """Fetches the summaries from the links and returns them."""
     try:
         summaries = accessing_links()
-        return summaries
+        if summaries and isinstance(summaries, list):  # Ensure valid list
+            return {"status": "success", "summaries": summaries}
+        else:
+            return {"status": "error", "message": "No summaries found in the response"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -68,19 +63,21 @@ def get_links(soup):
 
         with open(link_file, "w") as file:
             json.dump(extracted_items, file, indent=4)
+    else:
+        print("No items found in RSS feed")
 
 def accessing_links():
     """Fetches article summaries from Groq API and returns them."""
-    summaries = []
+    summaries_data = []
     if os.path.exists(link_file):
         with open(link_file, "r") as file:
             data = json.load(file)
             for link in data:
                 article_url = link["link"]
-                summary = send_to_groq(article_url)
-                if summary:
-                    summaries.append(summary)
-    return summaries
+                reply = send_to_groq(article_url)
+                if reply:
+                    summaries_data.append(reply)
+    return summaries_data
 
 def send_to_groq(article_url):
     """Sends the article URL to Groq API for summarization."""
@@ -92,7 +89,7 @@ def send_to_groq(article_url):
     data = {
         "model": "llama-3.3-70b-versatile",
         "messages": [
-            {"role": "system", "content": "Summarize the article from this URL and return the title, URL and summary as JSON."},
+            {"role": "system", "content": "Summarize the article from this URL. Your response will be a JSON object with title, url, and summary keys."},
             {"role": "user", "content": f"Summarize this link: {article_url}"},
         ],
     }
@@ -100,17 +97,23 @@ def send_to_groq(article_url):
     response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data)
 
     if response.status_code == 200:
-        ai_response = response.json()["choices"][0]["message"]["content"]
         try:
-            ai_response_json = json.loads(ai_response)
-            title = ai_response_json.get("title", "No title")
-            summary = ai_response_json.get("summary", "No summary")
-            return {"title": title, "url": article_url, "summary": summary}
+            ai_response = response.json()
+            if "choices" in ai_response and ai_response["choices"]:
+                ai_message = ai_response["choices"][0]["message"]["content"]
+                
+                # Extract JSON content between ```json and ```
+                match = re.search(r"```json(.*?)```", ai_message, re.DOTALL)
+                if match:
+                    ai_response_json = json.loads(match.group(1).strip())
+                    
+                    title = ai_response_json.get("title", "No title")
+                    summary = ai_response_json.get("summary", "No summary")
+                    
+                    return {"title": title, "url": article_url, "summary": summary}
         except json.JSONDecodeError:
-            print(ai_response)
             return None
     else:
-        print("Error:", response.json())
         return None
 
 # Ensure the script only runs when executed directly
