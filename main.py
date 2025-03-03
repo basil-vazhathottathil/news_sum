@@ -1,10 +1,10 @@
 import json
 import os
 import requests
-import re
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from fastapi import FastAPI
+import uvicorn
 
 # Load environment variables
 load_dotenv()
@@ -34,7 +34,7 @@ def get_summaries():
     """Fetches the summaries from the links."""
     try:
         summaries = accessing_links()
-        return {"status": "success", "summaries": summaries}
+        return summaries
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -101,14 +101,13 @@ def send_to_groq(article_url):
 
     if response.status_code == 200:
         ai_response = response.json()["choices"][0]["message"]["content"]
-        # Parse the JSON response
         try:
             ai_response_json = json.loads(ai_response)
             title = ai_response_json.get("title", "No title")
             summary = ai_response_json.get("summary", "No summary")
-            return {"title": title, "summary": summary}
+            return {"title": title, "url": article_url, "summary": summary}
         except json.JSONDecodeError:
-            print( ai_response)
+            print(ai_response)
             return None
     else:
         print("Error:", response.json())
@@ -116,4 +115,4 @@ def send_to_groq(article_url):
 
 # Ensure the script only runs when executed directly
 if __name__ == "__main__":
-    main()
+    uvicorn.run(app, host="127.0.0.1", port=3000)
