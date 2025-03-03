@@ -13,7 +13,6 @@ api_key = os.getenv("GROQ_API_KEY")
 # File paths
 link_file = "links.json"
 src_file = "src.json"
-summary_file = "summary.json"
 
 app = FastAPI()
 
@@ -27,6 +26,15 @@ def run_script():
     try:
         main()
         return {"status": "success", "message": "Script executed successfully"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/summaries")
+def get_summaries():
+    """Fetches the summaries from the links."""
+    try:
+        summaries = accessing_links()
+        return {"status": "success", "summaries": summaries}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -62,7 +70,8 @@ def get_links(soup):
             json.dump(extracted_items, file, indent=4)
 
 def accessing_links():
-    """Fetches article summaries from Groq API."""
+    """Fetches article summaries from Groq API and returns them."""
+    summaries = []
     if os.path.exists(link_file):
         with open(link_file, "r") as file:
             data = json.load(file)
@@ -70,7 +79,8 @@ def accessing_links():
                 article_url = link["link"]
                 summary = send_to_groq(article_url)
                 if summary:
-                    append_to_summaries_json(article_url, summary)
+                    summaries.append(summary)
+    return summaries
 
 def send_to_groq(article_url):
     """Sends the article URL to Groq API for summarization."""
@@ -82,7 +92,7 @@ def send_to_groq(article_url):
     data = {
         "model": "llama-3.3-70b-versatile",
         "messages": [
-            {"role": "system", "content": "Summarize the article from this URL and return the title and summary."},
+            {"role": "system", "content": "Summarize the article from this URL and return the title, URL and summary as JSON."},
             {"role": "user", "content": f"Summarize this link: {article_url}"},
         ],
     }
@@ -91,34 +101,18 @@ def send_to_groq(article_url):
 
     if response.status_code == 200:
         ai_response = response.json()["choices"][0]["message"]["content"]
-        # Improved AI response parsing
-        title_match = re.search(r"Title:\s*(.*?)\n", ai_response, re.IGNORECASE)
-        summary_match = re.search(r"Summary:\s*(.*)", ai_response, re.IGNORECASE | re.DOTALL)
-
-        title = title_match.group(1) if title_match else "Untitled"
-        summary = summary_match.group(1) if summary_match else "No summary available."
-
-        return {"title": title.strip(), "summary": summary.strip()}
+        # Parse the JSON response
+        try:
+            ai_response_json = json.loads(ai_response)
+            title = ai_response_json.get("title", "No title")
+            summary = ai_response_json.get("summary", "No summary")
+            return {"title": title, "summary": summary}
+        except json.JSONDecodeError:
+            print( ai_response)
+            return None
     else:
         print("Error:", response.json())
         return None
-
-def append_to_summaries_json(article_url, ai_response):
-    """Stores AI-generated summaries into a JSON file."""
-    summary_data = {"source": article_url, "data": ai_response}
-
-    if os.path.exists(summary_file):
-        with open(summary_file, "r+") as file:
-            try:
-                array_of_summaries = json.load(file)
-            except json.JSONDecodeError:
-                array_of_summaries = []
-            array_of_summaries.append(summary_data)
-            file.seek(0)
-            json.dump(array_of_summaries, file, indent=4)
-    else:
-        with open(summary_file, "w") as file:
-            json.dump([summary_data], file, indent=4)
 
 # Ensure the script only runs when executed directly
 if __name__ == "__main__":
