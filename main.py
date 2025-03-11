@@ -5,6 +5,7 @@ import re
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # Load environment variables
@@ -15,7 +16,22 @@ api_key = os.getenv("GROQ_API_KEY")
 link_file = "links.json"
 src_file = "src.json"
 
+# Initialize FastAPI app
 app = FastAPI()
+
+# Configure CORS middleware
+origins = [
+    "http://localhost:5173",  # Your local frontend URL
+    "https://news-sum-sjw4.onrender.com",  # The backend server itself (in case it's needed)
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Allows requests from specified origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
 
 @app.get("/")
 def home():
