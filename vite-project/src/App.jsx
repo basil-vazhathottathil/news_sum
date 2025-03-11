@@ -10,33 +10,37 @@ function App() {
   useEffect(() => {
     async function fetchData() {
       const result = await getData();
-      setData(result);
+      setData(result || []);  // Ensure data is always an array
     }
     fetchData();
   }, []);
 
   const handlePrevious = () => {
-    setCurrentIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : data.length - 1));
+    if (data.length > 0) {
+      setCurrentIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : data.length - 1));
+    }
   };
 
   const handleNext = () => {
-    setCurrentIndex((prevIndex) => (prevIndex < data.length - 1 ? prevIndex + 1 : 0));
+    if (data.length > 0) {
+      setCurrentIndex((prevIndex) => (prevIndex < data.length - 1 ? prevIndex + 1 : 0));
+    }
   };
 
   return (
-    <>
-      <div className="flex items-center justify-center rounded-lg w-screen h-screen">
-        {data.length > 0 && (
-          <Card
-            title={data[currentIndex].title}
-            summary={data[currentIndex].summary}
-            link={data[currentIndex].link}
-            onPrevious={handlePrevious}
-            onNext={handleNext}
-          />
-        )}
-      </div>
-    </>
+    <div className="flex items-center justify-center rounded-lg w-screen h-screen">
+      {data.length > 0 ? (
+        <Card
+          title={data[currentIndex].title}
+          summary={data[currentIndex].summary}
+          link={data[currentIndex].link}
+          onPrevious={handlePrevious}
+          onNext={handleNext}
+        />
+      ) : (
+        <p>Loading...</p>  // Show a loading message or something else while the data is being fetched
+      )}
+    </div>
   );
 }
 
